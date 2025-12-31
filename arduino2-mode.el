@@ -83,6 +83,14 @@
   :group 'arduino2
   :type  'string)
 
+(defcustom arduino2-message-display-method 'window
+  "Method of messags display."
+  :group 'arduino2
+  :type '(choice
+          (const :tag "Tooltip" tooltip)
+          (const :tag "Bottom window" window)
+          (const :tag "Minibuffer" minibuffer)))
+
 (defcustom arduino2-mode-home "~/Arduino"
   "The path of ARDUINO_HOME."
   :group 'arduino2
@@ -106,23 +114,13 @@
   "Default fqbn to use if board selection fails."
   :group 'arduino2
   :type  '(choice
-	         (const :tag "No default (error message if board selection fails)"
-		              nil)
-	         (string :tag "Fully qualified board name")))
+           (const :tag "No default (error message if board selection fails)"
+                  nil)
+           (string :tag "Fully qualified board name")))
 
-;; This is a string that is an "Upload port address, e.g.: COM3 or
-;; /dev/ttyACM2" (according to arduino2 help message).
-;; It might be possible to validate it, but for now we just treat
-;; it as a string; arduino2-mode does not parse it, but simply
-;; passes the value to arduino2.
-
-(defcustom arduino2-default-port nil
-  "Default port to use if board selection fails."
-  :group 'arduino2
-  :type  '(choice
-	         (const :tag "No default (error message if board selection fails)"
-		              nil)
-	         (string :tag "Port address")))
+(defvar arduino2-current-port nil
+  "Currently used port to connect to arduino board.
+This variable used as a key reference to arduino2-existing-boards hash")
 
 (defcustom arduino2-verify nil
   "Non-nil means verify uploaded binary after the upload."
@@ -297,6 +295,10 @@ Each list item should be a regexp matching a single identifier."
   '(("else" "else" c-electric-continued-statement 0)
     ("while" "while" c-electric-continued-statement 0)))
 
+(defvar arduino2-existing-boards (make-hash-table :test 'equal)
+  "Hash of detected or manually defined arduino boards in format:
+`board-port -> (list \"board-fqbn\" \"board-name\" \"board-protocol\")'")
+
 ;;;
 ;;; Internal functions
 ;;;
@@ -356,8 +358,8 @@ Each list item should be a regexp matching a single identifier."
 (defun arduino2--compile (cmd)
   "Run arduino2 CMD in 'arduino2-compilation-mode."
   (let* ((arduino2-exec-path (expand-file-name arduino2-cli-executable arduino2-default-bin))
-         (cmd  (concat arduino2-exec-path " " cmd " " (shell-quote-argument (expand-file-name default-directory))))
-         (cmd* (arduino2--add-flags 'compile cmd)))
+         (cmd2 (concat arduino2-exec-path " " cmd " " (shell-quote-argument (expand-file-name default-directory))))
+         (cmd* (arduino2--add-flags 'compile cmd2)))
     (save-some-buffers (not compilation-ask-about-save) (lambda () default-directory))
     (setf arduino2--compilation-buffer
           (compilation-start cmd* 'arduino2-compilation-mode))))
@@ -370,16 +372,38 @@ Each list item should be a regexp matching a single identifier."
     (setf arduino2--compilation-buffer
           (compilation-start cmd 'arduino2-compilation-mode))))
 
+(defun arduino2--temp-buffer-show (msg)
+  "Display MSG message in separate temporary buffer."
+  (let ((buf (get-buffer-create "*arduino2-popup*")))
+    (with-current-buffer buf
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert (concat msg "\n\nPress q to close"))
+        (special-mode)))
+    (display-buffer
+     buf
+     '((display-buffer-at-bottom)
+       (window-height . fit-window-to-buffer)))))
+
+(defun arduino2--display-message (msg)
+  "Display message MSG with selected method."
+  (pcase arduino2-message-display-method
+    ('tooltip (tooltip-show msg))
+    ('window
+     (arduino2--temp-buffer-show msg))
+    ('minibuffer
+     (message "%s" msg))))
+
 (defun arduino2--message (cmd &rest path)
   "Run arduino2 CMD in PATH (if provided) and print as message.
-If PATH is not provided, default-directory is used.
+If PATH is not provided, `default-directory' is used.
 PATH should be an absolute directory name."
   (let* ((default-directory (if path (car path) default-directory))
          (arduino2-exec-path (expand-file-name arduino2-cli-executable arduino2-default-bin))
-         (cmd  (concat arduino2-exec-path " " cmd))
-         (cmd* (arduino2--add-flags 'message cmd))
+         (cmd2  (concat arduino2-exec-path " " cmd))
+         (cmd* (arduino2--add-flags 'message cmd2))
          (out  (shell-command-to-string cmd*)))
-    (message "%s" (string-trim out))))
+    (arduino2--display-message (string-trim out))))
 
 (defun arduino2--arduino? (usb-device)
   "Return USB-DEVICE if it is an Arduino, nil otherwise."
@@ -402,57 +426,45 @@ PATH should be an absolute directory name."
                 (arduino2--?map-put arduino2-default-fqbn 'fqbn)
                 (arduino2--?map-put (arduino2--?map-put '() arduino2-default-port 'address) 'port)))
 
-(defun arduino2--board ()
+(defun arduino2--board (&optional refreshed)
   "Get connected Arduino board."
-  (let* ((output          (arduino2--cmd-json "board list"))
-         (ports           (alist-get 'detected_ports output))
-         (boards          (seq-filter #'arduino2--arduino? ports))
-         (boards-info     (seq-map (lambda (m) (thread-first (assoc 'boards m) cdr (seq-elt 0))) boards))
-         (informed-boards (cl-mapcar (lambda (m n) (map-merge 'list m n)) boards boards-info))
-         (selected-board  (arduino2--dispatch-board informed-boards))
-         (default-board   (arduino2--default-board)))
-    (cond (selected-board selected-board)
-          (default-board  default-board)
-          (t (error "ERROR: No board connected")))))
+  (cond ((not arduino2-current-port)
+         (error "ERROR: No board selected"))
+        ((not arduino2-existing-boards)
+         ;; try to refresh board list
+         (if (not refreshed)
+             (progn
+               (arduino2--fill-detected-boards)
+               (arduino2--board t))
+           (error "ERROR: No board selected")))
+        (t (gethash arduino2-current-port arduino2-existing-boards))))
 
-;; TODO add automatic support for compiling to known cores when no boards are connected
-(defun arduino2--dispatch-board (boards)
-  "Correctly dispatch on the amount of BOARDS connected."
-  (pcase (length boards)
-    (`1           (car boards))
-    ((pred (< 1)) (arduino2--select-board boards))
-    (_ nil)))
-
-(defun arduino2--board-fqbn (board)
+(defun arduino2--board-fqbn ()
   "Get FQBN of BOARD.
 If BOARD has multiple matching_boards, the first one is used."
-  (let* ((matching-boards (cdr (assoc 'matching_boards board)))
-         ;; TODO: does the order here make sense?
-         (first-matching-board (if matching-boards
-                                   (aref matching-boards 0)
-                                 board))
-         (fqbn (cdr (assoc 'fqbn first-matching-board))))
-    fqbn))
+  ;; NOTE: board format is: '(fqbn name protocol)
+  (car (arduino2--board)))
 
-(defun arduino2--board-address (board)
-  "Get port address of BOARD."
-  (cdr (assoc 'address (cdr (assoc 'port board)))))
+;; (defun arduino2--board-address (board)
+;;   "Get port address of BOARD."
+;;   (cdr (assoc 'address (cdr (assoc 'port board)))))
 
 (defun arduino2--board-name (board)
   "Get name of BOARD in (name @ port) format."
-  (concat (cdr (assoc 'name board))
-          " @ "
-          (arduino2--board-address board)))
+  (cadr board))
+;; (concat (cdr (assoc 'name board))
+;;         " @ "
+;;         (arduino2--board-address board)))
 
-(defun arduino2--select-board (boards)
-  "Prompt user to select an Arduino from BOARDS."
-  (let* ((board-names (cl-mapcar #'arduino2--board-name boards))
-         (selection   (thread-first board-names
-                                    (arduino2--select "Board ")
-                                    (split-string "@")
-                                    cadr
-                                    string-trim)))
-    (car (seq-filter (lambda (m) (arduino2--selected-board? m selection)) boards))))
+;; (defun arduino2--select-board (boards)
+;;   "Prompt user to select an Arduino from BOARDS."
+;;   (let* ((board-names (cl-mapcar #'arduino2--board-name boards))
+;;          (selection   (thread-first board-names
+;;                                     (arduino2--select "Board ")
+;;                                     (split-string "@")
+;;                                     cadr
+;;                                     string-trim)))
+;;     (car (seq-filter (lambda (m) (arduino2--selected-board? m selection)) boards))))
 
 (defun arduino2--cores ()
   "Get installed Arduino cores."
@@ -520,7 +532,102 @@ If BOARD has multiple matching_boards, the first one is used."
     (kill-buffer download-buffer)
     (set-file-modes download-path download-path-modes)))
 
+(defun arduino2--fill-detected-boards ()
+  "Detect currently connected boards and (re)fill `arduino2-existing-boards' with fresh board values."
+  (let* ((board-item-list '())
+         (arduino2-exec-path (expand-file-name arduino2-cli-executable arduino2-default-bin))
+         (cmd (concat arduino2-exec-path " board list --json"))
+         (raw-out (shell-command-to-string cmd))
+         (out (gethash "detected_ports" (json-parse-string raw-out :array-type 'list))))
+    ;; convert `out' variable that is the list of detected boards
+    ;; to board-item-list
+    (dolist (board out)
+      (let* ((matching-boards (gethash "matching_boards" board))
+             (port (gethash "port" board))
+             (port-address (gethash "address" port))
+             (port-proto (gethash "protocol" port))
+             board-name
+             board-fqbn)
+        ;; fill board name and fqbn
+        (if (null matching-boards)
+            (progn
+              (setq board-name "unknown")
+              (setq board-fqbn "unknown"))
+          (let ((mb (car matching-boards)))
+            (setq board-name (gethash "name" mb))
+            (setq board-fqbn (gethash "fqbn" mb))))
+        ;; append board item to board item list
+        (push (list port-address board-fqbn board-name port-proto) board-item-list)))
+    ;; refill hash table arduino2-existing-boards
+    (clrhash arduino2-existing-boards)
+    (dolist (b board-item-list)
+      (puthash (car b) (cdr b) arduino2-existing-boards))))
+
+(defun arduino2--supported-boards ()
+  "Get list of all supported boards by Arduino.
+Output format is alist `(\"Board Name\" . \"board fqbn)'
+useful for various selections"
+  (let* ((board-items '())
+         (arduino2-exec-path (expand-file-name arduino2-cli-executable arduino2-default-bin))
+         (cmd  (concat arduino2-exec-path " board listall --json"))
+         (raw-out  (shell-command-to-string cmd))
+         (out (gethash "boards" (json-parse-string raw-out :array-type 'list))))
+    (dolist (board-type out)
+      (let* ((bp (gethash "platform" board-type))
+             (bp-compatible (gethash "compatible" (gethash "release" bp)))
+             (bp-boards (gethash "boards" (gethash "release" bp))))
+        (dolist (b bp-boards)
+          (if bp-compatible
+              (push `(,(gethash "name" b) . ,(gethash "fqbn" b)) board-items)))))
+    board-items))
+
+;;;
 ;;; User commands
+;;;
+(defun arduino2-refresh-connected-board-list()
+  "Refresh board list connected to the system."
+  (interactive)
+  (arduino2--fill-detected-boards))
+
+(defun arduino2-set-board-fqbn ()
+  "Select manually and set board fqbn, connected to port.
+Useful if board is not detected correctly."
+  (interactive)
+  (let (connected-board-ports)
+    (maphash
+     (lambda (key value)
+       (push `(,(concat key " (" (cadr value) ")") . ,key) connected-board-ports))
+     arduino2-existing-boards)
+
+    (let* ((port-choice (completing-read "Port: " (mapcar #'car connected-board-ports) nil t))
+           (current-board-port (cdr (assoc port-choice connected-board-ports)))
+           (supported-board-items (arduino2--supported-boards))
+           (board-choice (completing-read
+                          "Board Name: "
+                          (mapcar #'car supported-board-items)
+                          nil t))
+           (current-board-fqdn (cdr (assoc board-choice supported-board-items)))
+
+           (current-board-item (gethash current-board-port arduino2-existing-boards))
+           ;; fill new board item in format: (list \"board-fqbn\" \"board-name\" \"board-protocol\")'"
+           (new-board-item `(,current-board-fqdn ,board-choice ,(caddr current-board-item))))
+      ;; update current board item
+      (puthash current-board-port new-board-item arduino2-existing-boards)
+      (message "Selected symbol: %S %S" current-board-item new-board-item))))
+
+(defun arduino2-select-port ()
+  "Вибір мови з аліста."
+  (interactive)
+  (let (boards)
+    (maphash
+     (lambda (key value)
+       (push `(,(concat key " (" (cadr value) ")") . ,key) boards))
+     arduino2-existing-boards)
+    (let* ((choice (completing-read "Board: " (mapcar #'car boards) nil t))
+           (the-list (cdr (assoc choice boards))))
+      (message "Selected board: %S" the-list)
+      (setq arduino2-current-port the-list))))
+
 (defun arduino2-install-cli()
   "Install arduino-cli automatically."
   (interactive)
@@ -538,10 +645,9 @@ If BOARD has multiple matching_boards, the first one is used."
 (defun arduino2-compile ()
   "Compile Arduino project."
   (interactive)
-  (let* ((board (arduino2--board))
-         (fqbn  (if-let (fqbn (arduino2--board-fqbn board)) fqbn
-                  (error "ERROR: No fqbn specified")))
-         (cmd   (concat "compile --fqbn " fqbn)))
+  (let* ((fqbn (if-let (fqbn (arduino2--board-fqbn)) fqbn
+                 (error "ERROR: No fqbn specified")))
+         (cmd (concat "compile --fqbn " fqbn)))
     (arduino2--compile cmd)))
 
 (defun arduino2-compile-and-upload ()
@@ -551,14 +657,13 @@ If BOARD has multiple matching_boards, the first one is used."
     (arduino2-stop-serial-monitor "to upload a sketch")
     (add-hook 'compilation-finish-functions
               #'arduino2--start-serial-monitor-callback))
-  (let* ((board (arduino2--board))
-         (fqbn  (if-let (fqbn (arduino2--board-fqbn board))
-                    fqbn
-                  (error "ERROR: No fqbn specified")))
-         (port  (if-let (port (arduino2--board-address board))
-                    port
-                  (error "ERROR: No port specified")))
-         (cmd   (concat "compile --fqbn " fqbn " --port " port " --upload")))
+  (let* ((fqbn (if-let (fqbn (arduino2--board-fqbn))
+                   fqbn
+                 (error "ERROR: No fqbn specified")))
+         (port (if-let (port arduino2-current-port)
+                   port
+                 (error "ERROR: No port specified")))
+         (cmd (concat "compile --fqbn " fqbn " --port " port " --upload")))
     (arduino2--compile cmd)))
 
 (defun arduino2-upload ()
@@ -581,7 +686,13 @@ If BOARD has multiple matching_boards, the first one is used."
 (defun arduino2-board-list ()
   "Show list of connected Arduino boards."
   (interactive)
-  (arduino2--message "board list"))
+  ;; (arduino2-refresh-connected-board-list)
+  (let ((boards "Connected boards:\n-----------------\n"))
+    (maphash
+     (lambda (key value)
+       (setq boards (concat boards (cadr value) " @ " key "\n")))
+     arduino2-existing-boards)
+    (arduino2--display-message boards)))
 
 (defun arduino2-core-list ()
   "Show list of installed Arduino cores."
@@ -857,10 +968,13 @@ If provided, REASON is printed in a message in the buffer."
     ["Upload Project"             arduino2-upload]
     ["Compile and Upload Project" arduino2-compile-and-upload]
     "--"
-    ["Board list"     arduino2-board-list]
-    ["Core list"      arduino2-core-list]
-    ["Core install"   arduino2-core-install]
-    ["Core uninstall" arduino2-core-uninstall]
+    ["Board list" arduino2-board-list]
+    ["Refresh Connected Boards" arduino2-refresh-connected-board-list]
+    ["Update Board Name" arduino2-set-board-fqbn]
+    ["Select Port Board Connected to" arduino2-select-port]
+    ;; ["Core list"      arduino2-core-list]
+    ;; ["Core install"   arduino2-core-install]
+    ;; ["Core uninstall" arduino2-core-uninstall]
     "--"
     ["Library list"      arduino2-lib-list]
     ["Library install"   arduino2-lib-install]
