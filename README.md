@@ -1,36 +1,61 @@
 # arduino2-mode
 
-`arduino2-mode` is an Emacs minor mode for using the excellent new 
-[arduino command line interface](https://github.com/arduino/arduino2)
-in an Emacs-native fashion. The mode covers the full range of
-`arduino2` features in an Emacs native fashion. It even 
-leverages the infinite power the GNU to provide fussy-finding
-of libraries and much improved support for handling multiple boards.
-The commands that originally require multiple steps (such as first
-searching for a library and then separately installing it) have
-been folded into one.
+`arduino2-mode` is an Emacs major for editing arduino-based projects.
+This project is a combination of original
+[arduino-mode](https://github.com/stardiviner/arduino-mode/tree/23ae47c9f28f559e70b790b471f20310e163a39b)
+using arduino v.1 ecosystem as a backend, [arduino-cli-mode](https://github.com/motform/arduino-cli-mode)
+using the new [arduino command line interface](https://github.com/arduino/arduino2)
+and [lsp-arduino](https://github.com/mgrunwald/emacs-lsp-arduino) LSP client.
+Some code were ported from these projects and some is brand new.
+I've tried to merge the best from all three projects into this `arduino2-mode`.
 
+## Whats new (comparing to original ones?)
+
+- This mode is an emacs *major* mode, using arduino v.2 IDE ecosystem, including
+features like "Open with Arduino IDE", "Compile and Upload Project" and "Board list"
+adopted to arduino v.2 IDE and CLI.
+
+- This mode allows to install IDE and CLI automatically in two menu clicks:
+`Menu: Arduino2` -> `Install IDE` and `Menu: Arduino2` -> `Install CLI`. But, only the CLI
+is essential to work with `arduino2-mode`
+- Changed board selection mechanism:
+  1. After board connected, run `M-x`->`arduino2-refresh-connected-board-list` or
+     click menu item `Arduino2`->`Refresh Connected Boards` (it did not implemented
+     as an automatic refresh).
+  2. Select working serial port with `M-x`->`arduino2-select-port` or click
+     menu item `Arduino2`->`Select Port Board Connected to`
+  3. _(OPTIONAL only if board type does not detected automatically by arduino-cli. 
+     Typical for e.g. ESP32 boards)_ select board type manually: 
+     `M-x`->`arduino2-set-board-fqbn` or click menu item `Arduino2`->
+     `Update Board Name`. Than select port and board name from list.
+- Message output channel could be selected and set as `arduino2-message-display-method` customization
+
+> NOTE: `arduino2-select-port` could be performed dynamicslly at any time. It allows to work 
+ with several boards at once.
+ 
+> NOTE: manual board selection erased after connected board list refresh (TODO: probably 
+this behavior should be fixed).
 
 ## Installation
 
-The recommended way to install `arduino2-mode` is through [melpa](http://melpa.org/#/arduino2-mode). 
-Depending on if you use [arduino-mode](https://melpa.org/#/arduino-mode) 
-or not, you might want to load `arduino2-mode` either as a hook or as a mode.
-A sample configuration with [use-package](https://github.com/jwiegley/use-package) could look like this:
+Just clone this repo to some local path and add it to load-path. Than use `require` or `use-package`. Some simple example:
 
 ```elisp
+(add-to-list 'load-path "/the/path/to/arduino2-mode")
+
 (use-package arduino2-mode
   ;; :hook arduino2-mode
   ;; :mode "\\.ino\\'"
   :custom
   (arduino2-warnings 'all)
   (arduino2-verify t))
+
 ;; To use LSP integration should also `lsp-arduino2' package used
 (use-package lsp-arduino2 :after arduino2-mode)
 ```
 
 To install and use arduino LSP server, `golang` package must be installed initially (debian eaxmple):
-```shell
+```bash
 user@host $ sudo apt install golang -y
 ```
 For easy installation of arduino LSP server, execute command: `M-x`->`lsp-arduino2-install-srever`.
@@ -42,66 +67,19 @@ or use menu bar in arduino2 mode:
 
 Also, keep in mind that you need a FUSE for Arduino IDE (as described [here](https://support.arduino.cc/hc/en-us/articles/360019833020-Download-and-install-Arduino-IDE)). An example for debian-based distros:
 
-```shell
-sudo apt install libfuse2
+```bash
+user@host $ sudo apt install libfuse2
 ```
 Also, you should update file `/etc/udev/rules.d/99-arduino.rules` with
-```shell
+```conf
 SUBSYSTEMS=="usb", ATTRS{idVendor}=="2341", GROUP="plugdev", MODE="0666"
 ```
-
-## Default boards
-
-By default `arduino2-mode` uses the `board list` command from
-`arduino2` to determine which board to target. This works well 
-if you have a genuine Arduino board (with its unique USB Vendor ID and Product ID)
-and it is currently connected, 
-but won't work if your board is not plugged in 
-or is an unbranded board with generic USB Vendor and Product IDs.
-
-To cover these use cases you are able to set a default board
-(fqbn) and port via `arduino2-default-fqbn` and
-`arduino2-default-port` respectively. These can, of course, be set
-globally via your `init`, but you may find them to be an excellent fit
-for
-[dir](https://www.gnu.org/software/emacs/manual/html_node/elisp/Directory-Local-Variables.html)
-and [file local variables](https://www.gnu.org/software/emacs/manual/html_node/elisp/File-Local-Variables.html#File-Local-Variables).
-For example, on a Linux system with an unbranded NodeMCU v2 compatible
-board connected to ttyUSB0,
-you could use the following line at the top of your sketch: 
-
-```cpp
-// -*- arduino2-default-fqbn: "esp8266:esp8266:nodemcuv2"; arduino2-default-port: "/dev/ttyUSB0"; -*-
-// (The rest of your sketch follows as usual.)
-```
-
-
-To get the fqbn/port information for a currently connected board, use 
-`arduino2-board-list`.
-
-Using default board variables should be a bit faster, as it
-eliminates the need to shelling out and then parse JSON from `arduino2`.
-
 
 ## Customization
 
 
-You can enable the major flags from `arduino2` using similar enumerations. 
-
-| Flag                                 | Values                                       |
-| ---                                  | ---                                          |
-| `arduino2-verify`                 | `nil` (default), `t`                         |
-| `arduino2-warnings`               | `nil` (default), `'default`, `'more`, `'all` |
-| `arduino2-verbosity`              | `nil` (default), `'quiet`, `'verbose`        |
-| `arduino2-compile-only-verbosity` | `nil`, `t` (default)                         |
-| `arduino2-compile-color`          | `nil`, `t` (default)                         |
-
-If you want to automatically enable `arduino2-mode` on `.ino` files, you have to get [auto-minor-mode](https://github.com/joewreschnig/auto-minor-mode).
-Once that is installed, add the following to your init:
-
-```elisp
-(add-to-list 'auto-minor-mode-alist '("\\.ino\\'" . arduino2-mode))
-```
+All `arduino2-mode` customizations are located in `arduino2` group 
+for `arduino2-mode` itself and in `lsp-arduino2` group for LSP client.
 
 
 ## Keymap
