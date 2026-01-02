@@ -20,24 +20,27 @@ A sample configuration with [use-package](https://github.com/jwiegley/use-packag
 
 ```elisp
 (use-package arduino2-mode
-  :ensure t
   ;; :hook arduino2-mode
   ;; :mode "\\.ino\\'"
   :custom
   (arduino2-warnings 'all)
-  (arduino2-verify t)
-  ;; if LSP used
-  ;; :config
-  ;; (add-to-list 'lsp-language-id-configuration '(arduino2-mode . "arduino"))
-  )
+  (arduino2-verify t))
+;; To use LSP integration should also `lsp-arduino2' package used
+(use-package lsp-arduino2 :after arduino2-mode)
 ```
+
+To install and use arduino LSP server, `golang` package must be installed initially (debian eaxmple):
+```shell
+user@host $ sudo apt install golang -y
+```
+For easy installation of arduino LSP server, execute command: `M-x`->`lsp-arduino2-install-srever`.
 
 For easy installation of Arduino IDE and Arduino CLI, execute commands:
 `M-x`->`arduino2-install-ide` and `M-x`->`arduino2-install-ide`
 or use menu bar in arduino2 mode:
 `Arduino2`->`Install CLI` and `Arduino2`->`Install IDE` (see customization group `arduino2` for fine tuning)
 
-Also, keep in mind that you need a FUSE for Arduino IDE. An example for debian-based distros:
+Also, keep in mind that you need a FUSE for Arduino IDE (as described [here](https://support.arduino.cc/hc/en-us/articles/360019833020-Download-and-install-Arduino-IDE)). An example for debian-based distros:
 
 ```shell
 sudo apt install libfuse2

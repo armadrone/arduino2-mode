@@ -46,27 +46,60 @@
   :type '(repeat string)
   :group 'lsp-arduino2)
 
-(with-eval-after-load 'lsp-mode
-  (add-to-list 'lsp-language-id-configuration
-               '(arduino2-mode . "arduino"))
-  )
+;; (with-eval-after-load 'lsp-mode
+;;   (add-to-list 'lsp-language-id-configuration
+;;                '(arduino2-mode . "arduino2")))
 
-(defun lsp-arduino2-install-srever()
-  "Install arduino language server."
-  (interactive)
-  (shell-command "go install github.com/arduino/arduino-language-server@latest"))
+(with-eval-after-load 'lsp-mode
+  (add-to-list 'lsp-language-id-configuration '(arduino2-mode . "arduino2")))
+
+(defun lsp-arduino2--install-server(_client callback error-callback _update?)
+  "Install arduino language server.
+
+  Will invoke CALLBACK or ERROR-CALLBACK based on result.
+  Will update if UPDATE? is t"
+  (lsp-async-start-process
+   callback
+   error-callback
+   "go" "install" "github.com/arduino/arduino-language-server@latest"))
+
+(defvar lsp-arduino2--current-fqbn arduino2-default-fqbn
+  "Set current arduino2 fqbn.")
+
+(defun lsp-arduino2-set-fqbn (fqbn)
+  "Set Arduino FQBN and restart Arduino LSP server."
+  ;; (interactive "sFQBN (e.g. arduino:avr:uno): ")
+  (setq lsp-arduino2--current-fqbn fqbn)
+  ;; Restart workspace for FQBN refresh
+  (when (lsp-workspaces)
+    (lsp-workspace-restart (lsp-find-workspace 'arduinols nil)))
+  (message "Arduino FQBN set to %s and LSP server restarted" fqbn))
+
+;; /home/defcon/Arduino/test4
 
 (lsp-register-client
- (make-lsp-client :new-connection (lsp-stdio-connection
-                                   (lambda ()
-                                     (let* ((go-path (getenv "GOPATH"))
-                                            (lsp-server-path (expand-file-name lsp-arduino2-server-path (or go-path "~/go/bin"))))
-                                       (cons lsp-server-path lsp-arduino2-server-args))))
+ (make-lsp-client :new-connection (let ((default-directory (if (buffer-file-name) (file-name-directory (buffer-file-name)) "~")))
+                                    (lsp-stdio-connection
+                                     (lambda ()
+                                       (let* ((go-path (getenv "GOPATH"))
+                                              (lsp-server-path (expand-file-name lsp-arduino2-server-path (or go-path "~/go/bin"))))
+                                         (list lsp-server-path lsp-arduino2-server-args " -fqbn " lsp-arduino2--current-fqbn)))))
+                  :activation-fn (lsp-activate-on "arduino2")
+                  :download-server-fn #'lsp-arduino2--install-server
                   :major-modes '(arduino2-mode)
                   :priority -1
                   :server-id 'arduinols))
 
-(lsp-consistency-check lsp-arduino2)
+;; add libraries from default arduino2 home directory
+(lsp-workspace-folders-add (file-name-concat arduino2-mode-home "libraries"))
+
+;;;###autoload
+(add-hook 'arduino2-mode-hook (lambda ()
+                                (when
+                                    (and
+                                     (fboundp 'lsp-workspace-folders-add)
+                                     (buffer-file-name))
+                                  (lsp-workspace-folders-add (file-name-directory (buffer-file-name))))))
 
 (provide 'lsp-arduino2)
 ;;; lsp-arduino2.el ends here

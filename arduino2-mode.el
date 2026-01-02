@@ -187,6 +187,7 @@ Value is a symbol.  The possible values are the symbols in the
   :type 'symbol
   :safe #'symbolp)
 
+
 (defcustom arduino2-font-lock-extra-types nil
   "List of extra types (aside from type keywords) to recognize in Arduino2 mode.
 Each list item should be a regexp matching a single identifier."
@@ -616,7 +617,7 @@ Useful if board is not detected correctly."
       (message "Selected symbol: %S %S" current-board-item new-board-item))))
 
 (defun arduino2-select-port ()
-  "Вибір мови з аліста."
+  "Select board port from accessible ports list."
   (interactive)
   (let (boards)
     (maphash
@@ -626,7 +627,11 @@ Useful if board is not detected correctly."
     (let* ((choice (completing-read "Board: " (mapcar #'car boards) nil t))
            (the-list (cdr (assoc choice boards))))
       (message "Selected board: %S" the-list)
-      (setq arduino2-current-port the-list))))
+      (setq arduino2-current-port the-list)
+
+      ;; process sync with lsp-arduino2 if possible
+      (when (fboundp 'lsp-arduino2-set-fqbn)
+        (lsp-arduino2-set-fqbn (arduino2--board-fqbn))))))
 
 (defun arduino2-install-cli()
   "Install arduino-cli automatically."
