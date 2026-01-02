@@ -1,9 +1,13 @@
 ;;; lsp-arduino2.el --- description -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2022 Markus Grunwald
+;; Copyright © 2022  Markus Grunwald, 2026  Armadrone LLC
 
-;; Author: Markus Grunwald
-;; Keywords: lsp, arduino
+;; Author: Markus Grunwald, Armadrone LLC
+;; URL: https://github.com/armadrone/arduino2-mode
+;; Version: 202601
+;; Package-Requires: ((emacs "29.1"))
+;; Created: 2026-01-11
+;; Keywords: lsp, arduino, processes tools
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -20,7 +24,7 @@
 
 ;;; Commentary:
 
-;; LSP Client for the Arduino build tool.
+;; LSP Client for the Arduino v.2.X.X-style ecosystem.
 
 ;;; Code:
 

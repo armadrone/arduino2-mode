@@ -7,7 +7,7 @@
 ;; Version: 202601
 ;; Package-Requires: ((emacs "29.1"))
 ;; Created: 2026-01-11
-;; Keywords: processes tools
+;; Keywords: arduino, processes tools
 
 ;; This file is NOT part of GNU Emacs.
 
