@@ -124,21 +124,14 @@ The following keybindings are provided out of the box.
 | Close Serial Monitor    | `C-c C-a M` |
 
 
-## Limitations
-
-* Does not support `board attach` commands
-* Only tested on macOS (but will probably work on other Unices)
-* Not called `elduino-mode`
-
-
 ## What it is not
 
-This mode is not an Arduino major mode, it only provides convenient access to arduino2.
-If you are looking for something like that, check out [arduino-mode](https://github.com/stardiviner/arduino-mode/tree/23ae47c9f28f559e70b790b471f20310e163a39b).
-In fact, I think they would complement each other rather well, as `arduino-mode` lacks support 
-for `arduino2`, simply due to pre-dating it with a decade.
+This mode is not compatible with arduino v.1.x.x. ecosystem and I am not not going to support it.
+For arduino v.1.x.x emacs mode, please check out
+[arduino-mode](https://github.com/stardiviner/arduino-mode/tree/23ae47c9f28f559e70b790b471f20310e163a39b)
 
-If you want auto-completion for Arduino development, see [company-arduino](https://github.com/yuutayamada/company-arduino/tree/d7e369702b8eee63e6dfdeba645ce28b6dc66fb1).
+If you want auto-completion for Arduino development, see
+[company-arduino](https://github.com/yuutayamada/company-arduino/tree/d7e369702b8eee63e6dfdeba645ce28b6dc66fb1).
 
 Depending on your board, you might also enjoy [platform-io-mode](https://github.com/ZachMassia/PlatformIO-Mode),
 an excellent wrapper that I took a lot of inspiration from while writing this one.
@@ -146,5 +139,4 @@ an excellent wrapper that I took a lot of inspiration from while writing this on
 
 ## Contribute
 
-This is my first real elisp project, so everything from code review to feature implementations are welcome!
-The plan is to support (more or less) the entire feature set of arduino2, and then go into maintenance mode.
+Please, fill free to make any contributions to this repository via github pull requests.
