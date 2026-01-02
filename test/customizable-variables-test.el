@@ -1,4 +1,4 @@
-;;; customizable-variables-test.el --- Tests for the user options of arduino-cli-mode -*- lexical-binding: t -*-
+;;; customizable-variables-test.el --- Tests for the user options of arduino2-mode -*- lexical-binding: t -*-
 ;;
 ;; Copyright © 2025
 ;;
@@ -33,7 +33,7 @@
 
 (require 'ert)
 
-(require 'arduino-cli-mode)
+(require 'arduino2-mode)
 
 ;;;; Internal functions
 
@@ -111,51 +111,51 @@ Define a test that assigns to user OPTION (with `setopt') in turn:
 
 ;;;; The tests
 
-;;;;; arduino-cli-mode-keymap-prefix - no tests
+;;;;; arduino2-mode-keymap-prefix - no tests
 
-;;;;; Test arduino-cli-default-fqbn
+;;;;; Test arduino2-default-fqbn
 
 ;; Simple FQBNs have the format <vendor>:<architecture>:<board-id> but
-;; the full syntax is more complicated, and arduino-cli-mode simply
-;; passes the value to arduino-cli.
+;; the full syntax is more complicated, and arduino2-mode simply
+;; passes the value to arduino2.
 
 (customizable-variable-test
-  arduino-cli-default-fqbn-test arduino-cli-default-fqbn 
+  arduino2-default-fqbn-test arduino2-default-fqbn 
   '("vendor:architecture:board_id") '(1))
 
-;;;;; Test arduino-cli-default-port
+;;;;; Test arduino2-default-port
 
 ;; This is a string that is an "Upload port address, e.g.: COM3 or
-;; /dev/ttyACM2" (according to arduino-cli help message).
+;; /dev/ttyACM2" (according to arduino2 help message).
 
 (customizable-variable-test
-  arduino-cli-default-port-test arduino-cli-default-port 
+  arduino2-default-port-test arduino2-default-port 
   '("/dev/ttyACM2" "COM3") '(1))
 
-;;;;; Test arduino-cli-verify (a boolean)
+;;;;; Test arduino2-verify (a boolean)
 
 (customizable-variable-test
-  arduino-cli-verify-test arduino-cli-verify '(nil t))
+  arduino2-verify-test arduino2-verify '(nil t))
 
-;;;;; Test arduino-cli-warnings (one of a number of documented symbols)
-
-(customizable-variable-test
- arduino-cli-warnings-test arduino-cli-warnings '(nil default more all) '(1))
-
-;;;;; Test arduino-cli-verbosity (one of a number of documented symbols)
+;;;;; Test arduino2-warnings (one of a number of documented symbols)
 
 (customizable-variable-test
- arduino-cli-verbosity-test arduino-cli-verbosity '(nil quiet verbose) '(1))
+ arduino2-warnings-test arduino2-warnings '(nil default more all) '(1))
 
-;;;;; Test arduino-cli-compile-only-verbosity (a boolean)
+;;;;; Test arduino2-verbosity (one of a number of documented symbols)
 
 (customizable-variable-test
-  arduino-cli-compile-only-verbosity-test arduino-cli-compile-only-verbosity 
+ arduino2-verbosity-test arduino2-verbosity '(nil quiet verbose) '(1))
+
+;;;;; Test arduino2-compile-only-verbosity (a boolean)
+
+(customizable-variable-test
+  arduino2-compile-only-verbosity-test arduino2-compile-only-verbosity 
   '(nil t))
 
 ;;;;; Test arduino-compile-colour (a boolean)
 
 (customizable-variable-test
-  arduino-cli-compile-color-test arduino-cli-compile-color '(nil t))
+  arduino2-compile-color-test arduino2-compile-color '(nil t))
 
 ;; customizable-variables-test.el ends here
